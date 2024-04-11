@@ -1,0 +1,95 @@
+import imaplib
+import email
+from docx import Document
+from datetime import datetime
+
+def fetch_emails(server, username, password):
+    # Connect to the IMAP server
+    mail = imaplib.IMAP4_SSL(server)
+    
+    # Login to the email account
+    mail.login(username, password)
+    
+    # Select the inbox folder
+    mail.select("inbox")
+    
+    # Search for unread emails
+    result, data = mail.search(None, "UNSEEN")
+    
+    # Get the list of email IDs
+    email_ids = data[0].split()
+    
+    # Fetch the latest email
+    if email_ids:
+        latest_email_id = email_ids[-1]
+        result, email_data = mail.fetch(latest_email_id, "(RFC822)")
+        raw_email = email_data[0][1]
+        msg = email.message_from_bytes(raw_email)
+        return msg
+    else:
+        return None
+
+def extract_email_text(msg):
+    # Initialize an empty string to store the email text
+    email_text = ""
+    
+    # Extract text from email body
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if content_type == "text/plain":
+                email_text += part.get_payload(decode=True).decode()
+    else:
+        email_text = msg.get_payload(decode=True).decode()
+    
+    return email_text
+
+def get_word_doc_title(msg):
+    # Extract subject line of the email
+    subject = msg['subject']
+    
+    # Extract recipient of the email
+    to_email = msg['to']
+    
+    # Extract date of the email
+    date = email.utils.parsedate_to_datetime(msg['date']).strftime("%Y-%m-%d")
+    
+    # Concatenate the components to form the title
+    title = f"{subject} - {to_email} - {date}.docx"
+    
+    # Replace characters not allowed in filenames
+    title = title.replace(':', '_').replace('/', '_').replace('\\', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+    
+    return title
+
+def write_to_word_document(text, title):
+    # Create a new Word document
+    doc = Document()
+    
+    # Add the email text to the document
+    doc.add_paragraph(text)
+    
+    # Save the document with the specified title
+    doc.save(title)
+
+if __name__ == "__main__":
+    # Email configuration
+    server = "imap.gmail.com"  # IMAP server address
+    username = "your_email@gmail.com"  # Your email address
+    password = "your_password"  # Your email password
+    
+    # Fetch the latest email
+    latest_email = fetch_emails(server, username, password)
+    
+    if latest_email:
+        # Extract text from the email
+        email_text = extract_email_text(latest_email)
+        
+        # Generate title for the Word document
+        title = get_word_doc_title(latest_email)
+        
+        # Write the email text to a Word document with the specified title
+        write_to_word_document(email_text, title)
+        print(f"Email text has been written to '{title}'")
+    else:
+        print("No unread emails found.")
